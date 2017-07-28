@@ -22,6 +22,7 @@ flag_list = ['t','q','p','u','e','y','o','w','m']
 def jiebafenci(all_the_text):
     re = ""
     relist = ""
+    all_the_text = all_the_text.strip()
     words = pseg.cut(all_the_text)
     count = 0
     for w in words:
@@ -32,7 +33,7 @@ def jiebafenci(all_the_text):
             re = re + " " + w.word
             count = count +1
         if count%100 == 0:
-            print re
+            #print re
             re = re.replace("\n"," ")
             relist = relist + "\n" + re
             re = ""
@@ -51,10 +52,10 @@ def getTrainData(inpath,outfile):
     fw = open(outfile,"a") 
     for filename in os.listdir(inpath):
         print filename
-        file_object = open(inpath+"\\"+filename)
+        file_object = open(inpath+"/"+filename)
         try:
             all_the_text = file_object.read()
-            all_the_text = all_the_text.decode("gb2312").encode("utf-8")
+            #all_the_text = all_the_text.decode("gb2312").encode("utf-8")
             pre_text = jiebafenci(all_the_text)
             if len(pre_text)>30:
                 fw.write(pre_text.encode("utf-8"))
@@ -64,6 +65,6 @@ def getTrainData(inpath,outfile):
             file_object.close()
     fw.close()
     
-inpath = 'E:\doc\data\SogouC.reduced.20061127\SogouC.reduced\Reduced\C000013'
-outfile = 'E:\doc\data\SogouC.reduced.20061127\SogouC.reduced\Reduced\C000013_pre.txt'
+inpath = '../SogouC.reduced/Reduced/C000024'
+outfile = '../SogouC.reduced/Reduced/C000024_pre.txt'
 getTrainData(inpath,outfile)
