@@ -28,6 +28,11 @@ batch_size=100
 word_idx_map_szie = 75924#18766#75924
 
 #一些数据预处理的方法====================================== 
+#####################################################################################
+#
+# 将输入的句子中的词，获取其在word_idx_map中的index，当词数不足max_l时，补充0.
+#
+#####################################################################################
 def get_idx_from_sent(sent, word_idx_map, max_l):
     """
     Transforms sentence into a list of indices. Pad with zeroes.
@@ -40,7 +45,10 @@ def get_idx_from_sent(sent, word_idx_map, max_l):
     while len(x) < max_l:
         x.append(0)
     #一个训练的一个输入 形式为[0,0,0,0,x11,x12,,,,0,0,0] 向量长度为max_l+2*filter_h-2
+    print x
     return x 
+
+# generate a batch of training corpus
 def generate_batch(minibatch_index):
     minibatch_data = revs[minibatch_index*batch_size:(minibatch_index+1)*batch_size]
     batchs = np.ndarray(shape=(batch_size, sentence_length), dtype=np.int32)
@@ -50,22 +58,23 @@ def generate_batch(minibatch_index):
         sentece = minibatch_data[i]["text"]
         lable =  minibatch_data[i]["y"]
         if lable==1:
-            labels[i] = [0,1]#
+            labels[i] = [0,1]# 无序分类，因此分两类就是2维的
         else:
             labels[i] = [1,0]#
         batch = get_idx_from_sent(sentece, word_idx_map, sentence_length)
         batchs[i] = batch
     return batchs, labels
-def get_test_batch(cv=1):
+
+def get_test_batch(cv=1): # process_data.py中设定的cv最大值为10，因此随机出的cv值为1 的概率为10%，因此这里的意思就是随机取10%的数据作为测试集
     test = []
     for rev in revs:
         if rev["split"]==cv:
             test.append(rev)        
     minibatch_data = test
-    test_szie =len(minibatch_data)
-    batchs = np.ndarray(shape=(test_szie, sentence_length), dtype=np.int32)
-    labels = np.ndarray(shape=(test_szie, 2), dtype=np.int32)  
-    for i in range(test_szie):
+    test_size =len(minibatch_data)
+    batchs = np.ndarray(shape=(test_size, sentence_length), dtype=np.int32)
+    labels = np.ndarray(shape=(test_size, 2), dtype=np.int32)  
+    for i in range(test_size):
         sentece = minibatch_data[i]["text"]
         lable =  minibatch_data[i]["y"]
         if lable==1:
@@ -75,6 +84,7 @@ def get_test_batch(cv=1):
         batch = get_idx_from_sent(sentece, word_idx_map, sentence_length)
         batchs[i] = batch
     return batchs, labels
+
 print "loading data...",
 x = cPickle.load(open("mr.p","rb"))
 # 读取出预处理后的数据 revs {"y":label,"text":"word1 word2 ..."}
@@ -116,11 +126,11 @@ def max_pool_2x2(x, filter_h):
 #要学习的词向量矩阵
 embeddings = tf.Variable(tf.random_uniform([word_idx_map_szie, vector_size], -1.0, 1.0)) 
 #输入reshape
-x_image_tmp = tf.nn.embedding_lookup(embeddings, x_in)
+x_image_tmp = tf.nn.embedding_lookup(embeddings, x_in) # 按照x_in顺序，返回embeddings中的第x_in行
 #输入size: sentence_length*vector_size
 #x_image = tf.reshape(x_image_tmp, [-1,sentence_length,vector_size,1])======>>>>>
 #将[None, sequence_length, embedding_size]转为[None, sequence_length, embedding_size, 1]
-x_image = tf.expand_dims(x_image_tmp, -1)#单通道
+x_image = tf.expand_dims(x_image_tmp, -1)#单通道 (函数本身是在最后一维后再添加一维，默认值为1)
 
 #定义卷积层===================================
 W_conv = []
@@ -134,6 +144,7 @@ for filter_h in filter_hs:
     W_conv.append(W_conv1)
     #b_conv1 = bias_variable([hidden_layer_input_size])
     b_conv.append(b_conv1)
+
 #进行卷积操作
 h_conv = []
 for W_conv1,b_conv1 in zip(W_conv,b_conv):
@@ -151,7 +162,7 @@ for h_conv1,filter_h in zip(h_conv,filter_hs):
 l2_reg_lambda=0.001
 #输入reshape
 num_filters_total = num_filters * len(filter_hs)
-h_pool = tf.concat(3, h_pool_output)
+h_pool = tf.concat(h_pool_output, 3) # api 修改
 h_pool_flat = tf.reshape(h_pool, [-1, num_filters_total])
 #h_pool_flat = tf.reshape(h_pool, [-1, hidden_layer_input_size*len(filter_hs)])
 
@@ -167,7 +178,7 @@ l2_loss += tf.nn.l2_loss(b)
 scores = tf.nn.xw_plus_b(h_drop, W, b, name="scores") # wx+b
 
 predictions = tf.argmax(scores, 1, name="predictions")
-losses = tf.nn.softmax_cross_entropy_with_logits(scores, y_in)
+losses = tf.nn.softmax_cross_entropy_with_logits(logits=scores, labels=y_in) # api changed
 loss = tf.reduce_mean(losses) + l2_reg_lambda * l2_loss
 
 correct_prediction = tf.equal(tf.argmax(scores,1), tf.argmax(y_in,1))
@@ -187,11 +198,15 @@ train_step = tf.train.AdagradOptimizer(learning_rate).minimize(loss,  global_ste
 timestamp = str(int(time.time()))
 out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
 print("Writing to {}\n".format(out_dir))
-loss_summary = tf.scalar_summary("loss", loss)
-acc_summary = tf.scalar_summary("accuracy", accuracy)
-train_summary_op = tf.merge_summary([loss_summary, acc_summary])
+#loss_summary = tf.scalar_summary("loss", loss)
+#acc_summary = tf.scalar_summary("accuracy", accuracy)
+loss_summary = tf.summary.scalar("loss", loss) # api changed
+acc_summary = tf.summary.scalar("accuracy", accuracy)
+#train_summary_op = tf.merge_summary([loss_summary, acc_summary])
+train_summary_op = tf.summary.merge([loss_summary, acc_summary]) # api changed
 train_summary_dir = os.path.join(out_dir, "summaries", "train")
-train_summary_writer = tf.train.SummaryWriter(train_summary_dir, sess.graph)
+#train_summary_writer = tf.train.SummaryWriter(train_summary_dir, sess.graph)
+train_summary_writer = tf.summary.FileWriter(train_summary_dir, sess.graph) # api changed
 checkpoint_dir = os.path.abspath(os.path.join(out_dir, "checkpoints"))
 checkpoint_prefix = os.path.join(checkpoint_dir, "model")
 if not os.path.exists(checkpoint_dir):
@@ -264,22 +279,3 @@ def plot(embeddings, labels):
 words = [reverse_dictionary[i] for i in range(1, num_points + 1)]
 plot(two_d_embeddings, words)   
 """   
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-
-
-
-
-
