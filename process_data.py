@@ -6,14 +6,22 @@ import sys, re
 import pandas as pd
 
 vector_size = 50
+
+#####################################################################
+#
+# 返回原始的文本及对其的标记
+# {label、原始文本、原始文本词数、cv值} 词典形式是为了方便pandas处理
+# 单词表{word : word_count}
+#
+#####################################################################
 def build_data_cv(data_folder, cv=10, clean_string=True):
     """
     二分类数据预处理
     Loads data and split into 10 folds.
     """
     revs = []
-    pos_file = data_folder[0]
-    neg_file = data_folder[1]
+    pos_file = data_folder[0] # positive corpus
+    neg_file = data_folder[1] # negative corpus
     vocab = defaultdict(float)
     count = 0
     with open(pos_file, "rb") as f:
@@ -26,7 +34,7 @@ def build_data_cv(data_folder, cv=10, clean_string=True):
             if clean_string:
                 orig_rev = clean_str(" ".join(rev))
             else:
-                orig_rev = " ".join(rev).lower()
+                orig_rev = " ".join(rev).lower() # 针对英文的处理，变成小写
             words = set(orig_rev.split())
             for word in words:
                 vocab[word] += 1
@@ -62,6 +70,7 @@ def build_data_cv(data_folder, cv=10, clean_string=True):
             if count>200000:
                 break
     return revs, vocab #返回原始的文本及对其的标记、单词表{word : word_count}
+
 
 def build_data_cv_multi(data_folder, cv=10, clean_string=False):
     """
@@ -125,14 +134,20 @@ def build_data_cv_multi(data_folder, cv=10, clean_string=False):
                       "split": np.random.randint(0,cv)}
             revs.append(datum)
     return revs, vocab
-    
+
+
+#####################################################################
+#
+# 输入词向量dict，输出带0头的词向量矩阵W, 和带下标的map
+#
+#####################################################################
 def get_W(word_vecs, k=vector_size):
     """
     Get word matrix. W[i] is the vector for word indexed by i
     """
     vocab_size = len(word_vecs)
     word_idx_map = dict()
-    W = np.zeros(shape=(vocab_size+1, k), dtype='float64')            
+    W = np.zeros(shape=(vocab_size+1, k), dtype='float64') # initializer 
     W[0] = np.zeros(k, dtype='float64')
     i = 1
     for word in word_vecs:
@@ -176,7 +191,7 @@ def add_unknown_words(word_vecs, vocab, min_df=1, k=vector_size):
         if word not in word_vecs and vocab[word] >= min_df:
             word_vecs[word] = np.random.uniform(-0.25,0.25,k)  
 
-def clean_str(string, TREC=False):
+def clean_str(string, TREC=False): # 针对英文数据的，将英文中的一些表达和标点添加空格 
     """
     Tokenization/string cleaning for all datasets except for SST.
     Every dataset is lower cased except for TREC
@@ -196,7 +211,7 @@ def clean_str(string, TREC=False):
     string = re.sub(r"\s{2,}", " ", string)    
     return string.strip() if TREC else string.strip().lower()
 
-def clean_str_sst(string):
+def clean_str_sst(string): # 将非英文和数字的字符变成空格，将连续多个空格变成一个空格
     """
     Tokenization/string cleaning for the SST dataset
     """
@@ -207,8 +222,7 @@ def clean_str_sst(string):
 if __name__=="__main__":    
     w2v_file = ""     
     #data_folder = ["rt-polarity.pos","rt-polarity.neg"] 
-    data_folder = ["E:\doc\data\SogouC.reduced.20061127\SogouC.reduced\Reduced\C000013_pre.txt",
-    "E:\doc\data\SogouC.reduced.20061127\SogouC.reduced\Reduced\C000024_pre.txt"] 
+    data_folder = ["../SogouC.reduced/Reduced/C000013_pre.txt", "../SogouC.reduced/Reduced/C000024_pre.txt"]
     print "loading data...",        
     revs, vocab = build_data_cv(data_folder, cv=10, clean_string=True)
     max_l = np.max(pd.DataFrame(revs)["num_words"])
@@ -226,5 +240,4 @@ if __name__=="__main__":
     add_unknown_words(rand_vecs, vocab) #得到一个{word:word_vec}词典
     W2, _ = get_W(rand_vecs)#构建一个随机初始化的W2词向量矩阵
     cPickle.dump([revs, W, W2, word_idx_map, vocab], open("mr.p", "wb"))
-    print "dataset created!"
-    
+    print "dataset created!" 
